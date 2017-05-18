@@ -22,7 +22,7 @@ class Population(object):
         :param population_count:
         :return:
         """
-        population_count = population_count
+        self.population_count = population_count
 
         for i in xrange(population_count):
             self.population.append(
@@ -39,14 +39,57 @@ class Population(object):
         mutate_prob of population mutate in single generation
         :return:
         """
-        pass
+        mutations_schema = {
+            '0': '1',
+            '1': '0',
+        }
+        for i, ind in enumerate(self.population):
+            mutate_random = random.uniform(0, 1)
+            if mutate_prob >= mutate_random:
+                random_pos = random.randint(0, 63)
+                ind_binary = list(ind.bin)
+                ind_binary[random_pos] = mutations_schema[
+                    ind_binary[random_pos]
+                ]
+                self.population[i] = bitstring.BitArray(
+                    bin="".join(ind_binary), )
 
     def crossover(self, cross_propability=0.2):
         """
         Crossover individuals in population
         :return:
         """
-        pass
+        def find_parents(parents_a, parents_b, ):
+            random_parent = random.randint(0, self.population_count-1)
+            if (
+                random_parent not in parents_a and
+                random_parent not in parents_b
+            ):
+                return random_parent
+            else:
+                return find_parents(parents_a, parents_b)
+
+        # store indexes of parents in self.population
+        parents_a = []
+        parents_b = []
+
+        for i, ind in enumerate(self.population):
+            crossover_random = random.uniform(0, 1)
+            if cross_propability >= crossover_random:
+                parent_a = find_parents(parents_a, parents_b)
+                parent_b = find_parents(parents_a, parents_b)
+                parents_a.append(parent_a)
+                parents_b.append(parent_b)
+
+        for j, parent in enumerate(parents_a):
+            parent_b_index = parents_b[j]
+            random_pos = random.randint(1, 63)
+            bin_a = self.population[parent].bin
+            bin_b = self.population[parent_b_index].bin
+            new_bin_a = bin_a[0: random_pos] + bin_b[random_pos:]
+            new_bin_b = bin_b[0: random_pos] + bin_a[random_pos:]
+            self.population[parent] = bitstring.BitArray(bin="".join(new_bin_a), )
+            self.population[parent_b_index] = bitstring.BitArray(bin="".join(new_bin_b), )
 
     def selection(self, func,):
         """
@@ -69,22 +112,36 @@ class Population(object):
             for key, value in choices.items():
                 current += value
                 if current > pick:
-                    return key
+                    return bitstring.BitArray(
+                        float=key, length=64,
+                    )
 
         choices = {}
         for individual in self.population:
             # assign value of test function to individual value
-            choices[individual] = func(individual)
+            choices[individual.float] = func(individual.float)
 
         new_population = []
-        for n in self.population_count:
-            new_population.append(
-                weighted_random_choice(choices),
-            )
+        while len(new_population) != len(self.population):
+            selected_ind = weighted_random_choice(choices)
+            if selected_ind:
+                new_population.append(
+                    selected_ind,
+                )
 
         self.population = new_population
 
 DOMAIN = (0.5, 2.5)
+ITERATION_NO = 100
+def test_function(x):
+    return x + 0.5
 
-population = Population(0.5, 2.5, 100)
+population = Population(0.5, 2.5, 20)
+for i in xrange(0, ITERATION_NO):
+    population.mutate()
+    population.crossover()
+    population.selection(test_function)
 
+print population.population[0].float
+print population.population[50].float
+print population.population[99].float

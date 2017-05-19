@@ -4,6 +4,7 @@ Implements genetic algorithm. Exercise 4 Inteligent Data Processing.
 # http://pythonhosted.org/bitstring/creation.html
 import bitstring
 import logging
+import operator
 import random
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,9 @@ class Population(object):
     """
     population = []
     population_count = None
-
+    genes_length = 32
+    start = None
+    stop = None
     def __init__(self, start, stop, population_count):
         """
         Return population(list) of random numbers in range start, stop
@@ -23,11 +26,13 @@ class Population(object):
         :return:
         """
         self.population_count = population_count
-
+        self.start = start
+        self.stop = stop
         for i in xrange(population_count):
             self.population.append(
                 bitstring.BitArray(
-                    float=random.uniform(start, stop), length=64, ),
+                    float=random.uniform(start, stop),
+                    length=self.genes_length, ),
             )
         logger.debug(
             'First generation of population: {}'.format(self.population)
@@ -46,13 +51,17 @@ class Population(object):
         for i, ind in enumerate(self.population):
             mutate_random = random.uniform(0, 1)
             if mutate_prob >= mutate_random:
-                random_pos = random.randint(0, 63)
+                random_pos = random.randint(0, self.genes_length - 1 )
                 ind_binary = list(ind.bin)
                 ind_binary[random_pos] = mutations_schema[
                     ind_binary[random_pos]
                 ]
-                self.population[i] = bitstring.BitArray(
+                mutated = bitstring.BitArray(
                     bin="".join(ind_binary), )
+                # test if it's number
+                if mutated.float == mutated.float:
+                    self.population[i] = mutated
+
 
     def crossover(self, cross_propability=0.2):
         """
@@ -83,13 +92,19 @@ class Population(object):
 
         for j, parent in enumerate(parents_a):
             parent_b_index = parents_b[j]
-            random_pos = random.randint(1, 63)
+            random_pos = random.randint(1, self.genes_length)
             bin_a = self.population[parent].bin
             bin_b = self.population[parent_b_index].bin
             new_bin_a = bin_a[0: random_pos] + bin_b[random_pos:]
             new_bin_b = bin_b[0: random_pos] + bin_a[random_pos:]
-            self.population[parent] = bitstring.BitArray(bin="".join(new_bin_a), )
-            self.population[parent_b_index] = bitstring.BitArray(bin="".join(new_bin_b), )
+            a_children = bitstring.BitArray(bin="".join(new_bin_a), )
+            b_children = bitstring.BitArray(bin="".join(new_bin_b), )
+
+            # nan test, if equal it means it's number
+            if a_children.float == a_children.float:
+                self.population[parent] = a_children
+            if b_children.float == b_children.float:
+                self.population[parent_b_index] = b_children
 
     def selection(self, func,):
         """
@@ -113,35 +128,55 @@ class Population(object):
                 current += value
                 if current > pick:
                     return bitstring.BitArray(
-                        float=key, length=64,
+                        float=key, length=self.genes_length,
                     )
-
+            pass
         choices = {}
         for individual in self.population:
             # assign value of test function to individual value
             choices[individual.float] = func(individual.float)
 
         new_population = []
+        loop_counter = 0
         while len(new_population) != len(self.population):
+            # for debugging
+            loop_counter += 1
+            if loop_counter > 100000:
+                break
+
             selected_ind = weighted_random_choice(choices)
             if selected_ind:
-                new_population.append(
-                    selected_ind,
-                )
+                selected_float = selected_ind.float
+                if (
+                    selected_float >= self.start and
+                    selected_float <= self.stop
+                ):
+                    new_population.append(
+                        selected_ind,
+                    )
+                else:
+                    del choices[selected_float]
+            else:
+                continue
 
         self.population = new_population
 
 DOMAIN = (0.5, 2.5)
-ITERATION_NO = 100
+ITERATION_NO = 1000
 def test_function(x):
     return x + 0.5
 
-population = Population(0.5, 2.5, 20)
+population = Population(0.5, 2.5, 100)
 for i in xrange(0, ITERATION_NO):
+    population.selection(test_function)
     population.mutate()
     population.crossover()
-    population.selection(test_function)
 
-print population.population[0].float
-print population.population[50].float
-print population.population[99].float
+results = {}
+for individual in population.population:
+    # assign value of test function to individual value
+    results[individual.float] = test_function(individual.float)
+
+the_best_result = max(results.iteritems(), key=operator.itemgetter(1))[0]
+
+print the_best_result

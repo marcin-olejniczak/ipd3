@@ -4,8 +4,12 @@ Implements genetic algorithm. Exercise 4 Inteligent Data Processing.
 # http://pythonhosted.org/bitstring/creation.html
 import bitstring
 import logging
+import math
+import matplotlib.pyplot as plt
+import numpy as np
 import operator
 import random
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +17,13 @@ class Population(object):
     """
     Represents population
     """
+    avg = None
     population = []
     population_count = None
-    genes_length = 32
+    genes_length = 64
     start = None
     stop = None
+
     def __init__(self, start, stop, population_count):
         """
         Return population(list) of random numbers in range start, stop
@@ -28,12 +34,16 @@ class Population(object):
         self.population_count = population_count
         self.start = start
         self.stop = stop
-        for i in xrange(population_count):
-            self.population.append(
-                bitstring.BitArray(
-                    float=random.uniform(start, stop),
-                    length=self.genes_length, ),
-            )
+        unique_inds = []
+        while len(self.population) <= population_count:
+            random_float = random.uniform(start, stop)
+            if not random_float in unique_inds:
+                unique_inds.append(random_float)
+                self.population.append(
+                    bitstring.BitArray(
+                        float=random_float,
+                        length=self.genes_length, ),
+                )
         logger.debug(
             'First generation of population: {}'.format(self.population)
         )
@@ -62,8 +72,7 @@ class Population(object):
                 if mutated.float == mutated.float:
                     self.population[i] = mutated
 
-
-    def crossover(self, cross_propability=0.2):
+    def crossover(self, cross_propability=0.3):
         """
         Crossover individuals in population
         :return:
@@ -82,7 +91,7 @@ class Population(object):
         parents_a = []
         parents_b = []
 
-        for i, ind in enumerate(self.population):
+        while len(parents_a) < len(self.population) * cross_propability:
             crossover_random = random.uniform(0, 1)
             if cross_propability >= crossover_random:
                 parent_a = find_parents(parents_a, parents_b)
@@ -130,11 +139,12 @@ class Population(object):
                     return bitstring.BitArray(
                         float=key, length=self.genes_length,
                     )
-            pass
+
         choices = {}
         for individual in self.population:
             # assign value of test function to individual value
-            choices[individual.float] = func(individual.float)
+            if self.start <= individual.float <= self.stop:
+                choices[individual.float] = func(individual.float)
 
         new_population = []
         loop_counter = 0
@@ -145,38 +155,88 @@ class Population(object):
                 break
 
             selected_ind = weighted_random_choice(choices)
-            if selected_ind:
-                selected_float = selected_ind.float
-                if (
-                    selected_float >= self.start and
-                    selected_float <= self.stop
-                ):
-                    new_population.append(
-                        selected_ind,
-                    )
-                else:
-                    del choices[selected_float]
-            else:
-                continue
+            selected_float = selected_ind.float
+            new_population.append(
+                selected_ind,
+            )
 
+        self.avg = sum(choices.values()) / len(choices)
         self.population = new_population
 
-DOMAIN = (0.5, 2.5)
-ITERATION_NO = 1000
+
 def test_function(x):
-    return x + 0.5
+    if x > 2.5:
+        pass
+    return ((math.e ** x) * np.sin(10 * np.pi * x) + 1) / x
 
-population = Population(0.5, 2.5, 100)
-for i in xrange(0, ITERATION_NO):
-    population.selection(test_function)
-    population.mutate()
-    population.crossover()
+DOMAIN = (0.5, 2.5)
+ITERATION_NO = 50
+POPULATION_COUNT = 20
+avg_x = []
+avg_y = []
 
-results = {}
-for individual in population.population:
-    # assign value of test function to individual value
-    results[individual.float] = test_function(individual.float)
+def main(domain, iterations, test_function, inds_no):
+    population = Population(domain[0], domain[1], inds_no)
+    for i in xrange(0, iterations):
+        population.crossover()
+        population.mutate()
+        population.selection(test_function)
+        print '{}, {}'.format(i, population.avg)
+        avg_x.append(i)
+        avg_y.append(population.avg)
 
-the_best_result = max(results.iteritems(), key=operator.itemgetter(1))[0]
 
-print the_best_result
+    results = {}
+    for individual in population.population:
+        # assign value of test function to individual value
+        results[individual.float] = test_function(individual.float)
+
+    the_best_x = max(results.iteritems(), key=operator.itemgetter(1))[0]
+    the_best_y = test_function(the_best_x)
+    print 'x:{:.3f} y:{:.3f}'.format(the_best_x, the_best_y)
+    return the_best_x, the_best_y
+
+algorithm_result = main(DOMAIN, ITERATION_NO, test_function, POPULATION_COUNT)
+
+
+# draw function
+font = {'family': 'serif',
+        'color':  'darkred',
+        'weight': 'normal',
+        'size': 16,
+        }
+
+x = np.linspace(0.5, 2.5, 500)
+y = ((math.e**x) * np.sin(10*np.pi*x) + 1) / x
+
+plt.plot(x, y, '-g')
+plt.axvline(
+    x=algorithm_result[0],
+    ymin=0,
+    ymax=algorithm_result[1],
+    linewidth=3,
+)
+plt.text(algorithm_result[0] - 1, 4, 'Max f({:.3f}) = {:.3f}'.format(algorithm_result[0], algorithm_result[1], ), )
+plt.xlabel('x', fontdict=font)
+plt.ylabel('y', fontdict=font)
+
+# Tweak spacing to prevent clipping of ylabel
+plt.subplots_adjust(left=0.15)
+plt.show()
+pass
+# draw avg results
+font = {'family': 'serif',
+        'color':  'darkred',
+        'weight': 'normal',
+        'size': 16,
+        }
+
+plt.plot(avg_x, avg_y, '-g')
+
+plt.xlabel('iteration', fontdict=font)
+plt.ylabel('avg result of target function', fontdict=font)
+
+# Tweak spacing to prevent clipping of ylabel
+plt.subplots_adjust(left=0.15)
+plt.show()
+pass
